@@ -818,10 +818,18 @@ def _foldaxis(axis, x):
   return x.reshape(new_shape)
 
 def _all_to_all_via_all_gather(x, *, axis_name, split_axis, concat_axis, axis_index_groups):
-  full = all_gather(x, axis_name, axis_index_groups=axis_index_groups)
-  idx = axis_index(axis_name)
+  cur_device_id = axis_index(axis_name)
   if axis_index_groups:
-    idx = idx % len(axis_index_groups[0])
+    device_id_to_pos = np.full(len(axis_index_groups) * len(axis_index_groups[0]), -1, dtype=np.int32)
+    for group in axis_index_groups:
+      for group_id, device_id in enumerate(group):
+        device_id_to_pos[device_id] = group_id
+    if not np.all(device_id_to_pos != -1):
+      raise ValueError("Non-injective axis_index_groups")
+    idx = lax.squeeze(lax.dynamic_slice_in_dim(device_id_to_pos, cur_device_id, 1), [0])
+  else:
+    idx = cur_device_id
+  full = all_gather(x, axis_name, axis_index_groups=axis_index_groups)
   axis_size = full.shape[0]
   tile_size = x.shape[split_axis] // axis_size
   tile_base_idx = idx * tile_size
