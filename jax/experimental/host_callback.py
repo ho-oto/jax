@@ -1621,7 +1621,7 @@ def _initialize_outfeed_receiver(
 
     if clients is None:
       # By default, all devices on all backends
-      clients = xla_client._get_local_backends().values()  # type: ignore[protected-class]
+      clients = xb.backends().values()
       # Drop the interpreter clients
       clients = tuple([c for c in clients if c.platform != "interpreter"])  # type: ignore
     devices = list(
