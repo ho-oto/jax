@@ -2060,18 +2060,24 @@ tf_impl_with_avals[lax.slice_p] = _slice
 def _dynamic_slice(operand, *start_indices, slice_sizes,
                    _in_avals: Sequence[core.ShapedArray],
                    _out_aval: core.ShapedArray):
-  # Here we could use tf.slice. Similarly, for lax.gather we can sometimes use
-  # tf.gather. But those have different semantics for index-out-of-bounds than
-  # JAX (and XLA). We have tried to force compilation, by wrapping into
-  # tf.xla.experimental.compile, or tf.function(jit_compile=True), but
-  # those solutions are brittle because they do not work when nested into an
-  # outer compilation (see b/162814494 and b/163006262). They also do not
-  # survive well being put in a SavedModel. Hence, we now use TFXLA slicing
-  # and gather ops.
+  start_indices = tf.stack(start_indices)
+  slice_sizes = _eval_shape(slice_sizes)
+
   if not _enable_xla:
-    raise _xla_disabled_error("dynamic_slice")
-  res = tfxla.dynamic_slice(
-      operand, tf.stack(start_indices), size_indices=_eval_shape(slice_sizes))
+    # `lax.dynamic_slice_p` uses clamping if the slices are out of bounds, which
+    # means the start indexes are decreased so that slices of size
+    # `slice_sizes` are returned. `tf.slice` does not do this, so we manually
+    # adjust the start indices.
+
+    # clip_by_value fails if `start_indices` and `max_start` aren't of the same
+    # dtype. By explicitly casting to the right dtype here this doesn't happen.
+    shape = tf.constant(operand.shape.as_list(), dtype=start_indices.dtype)
+    max_start = tf.subtract(shape, slice_sizes)
+    start_indices = tf.clip_by_value(start_indices, 0, max_start)
+    res = tf.slice(operand, start_indices, size=slice_sizes)
+  else:
+    res = tfxla.dynamic_slice(operand, start_indices, size_indices=slice_sizes)
+
   # TODO: implement shape inference for XlaDynamicSlice
   res.set_shape(_aval_to_tf_shape(_out_aval))
   return res

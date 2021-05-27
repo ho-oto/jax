@@ -1913,10 +1913,11 @@ def _make_dynamic_slice_harness(name,
                                 shape=(3,),
                                 start_indices=(1,),
                                 limit_indices=(2,),
-                                dtype=np.float32):
+                                dtype=np.float32,
+                                enable_xla=True):
   define(
       lax.dynamic_slice_p,
-      f"{name}_a={jtu.format_shape_dtype_string(shape, dtype)}_start_indices={start_indices}_limit_indices={limit_indices}",
+      f"{name}_a={jtu.format_shape_dtype_string(shape, dtype)}_start_indices={start_indices}_limit_indices={limit_indices}_enablexla={enable_xla}",
       # type: ignore
       lax.dynamic_slice,
       [
@@ -1927,12 +1928,14 @@ def _make_dynamic_slice_harness(name,
       dtype=dtype,
       shape=shape,  # type: ignore
       start_indices=start_indices,  # type: ignore
-      limit_indices=limit_indices)  # type: ignore
+      limit_indices=limit_indices,  # type: ignore
+      enable_xla=enable_xla)
 
 
 # Test first all dtypes
 for dtype in jtu.dtypes.all:
-  _make_dynamic_slice_harness("dtypes", dtype=dtype)
+  for enable_xla in [False, True]:
+    _make_dynamic_slice_harness("dtypes", dtype=dtype, enable_xla=enable_xla)
 # Now test many shapes
 for shape, start_indices, limit_indices in [
     ((3,), (1,), (2,)),
@@ -1954,11 +1957,13 @@ for shape, start_indices, limit_indices in [
     ((5,), (10,), (11,)),
     ((5,), (3,), (6,))
 ]:
-  _make_dynamic_slice_harness(
-      "shapes",
-      shape=shape,
-      start_indices=start_indices,
-      limit_indices=limit_indices)
+  for enable_xla in [False, True]:
+    _make_dynamic_slice_harness(
+        "shapes",
+        shape=shape,
+        start_indices=start_indices,
+        limit_indices=limit_indices,
+        enable_xla=enable_xla)
 
 
 def _make_dynamic_update_slice_harness(name,
